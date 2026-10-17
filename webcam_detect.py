@@ -45,7 +45,7 @@ def main():
     parser.add_argument("--mute", action="store_true", help="disable speech")
     args = parser.parse_args()
 
-    # Downloads yolo26n.pt (about 5 MB) automatically on first run.
+    # USe nano version
     model = YOLO("yolo26n.pt")
 
     cap = cv2.VideoCapture(args.camera)
