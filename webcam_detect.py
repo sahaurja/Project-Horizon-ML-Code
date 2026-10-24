@@ -10,6 +10,7 @@ Usage:
     python webcam_detect.py --mute     # no speech
 
 Press q in the video window to quit.
+
 """
 
 import argparse
