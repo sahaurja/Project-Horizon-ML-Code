@@ -1,7 +1,8 @@
-"""Run YOLO26 nano locally on your webcam and identify objects.
+"""Run YOLO26 small locally on your webcam and identify objects.
 
-The most confident object in view is spoken aloud. It is announced when it
-changes, and repeated every --repeat seconds while it stays the same.
+The three most confident objects in view are spoken aloud, e.g. "person, cup,
+and laptop". They are announced when the set changes, and repeated every
+--repeat seconds while it stays the same.
 
 Usage:
     python webcam_detect.py            # default webcam
@@ -40,20 +41,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--camera", type=int, default=0, help="webcam index")
     parser.add_argument("--conf", type=float, default=0.4, help="minimum confidence")
+    parser.add_argument("--top", type=int, default=3,
+                        help="how many objects to speak")
     parser.add_argument("--repeat", type=float, default=5.0,
                         help="seconds before repeating the same object")
     parser.add_argument("--mute", action="store_true", help="disable speech")
     args = parser.parse_args()
 
-    # Downloads yolo26n.pt (about 5 MB) automatically on first run.
-    model = YOLO("yolo26n.pt")
+    # Downloads yolo26s.pt automatically on first run.
+    model = YOLO("yolo26s.pt")
 
     cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
         raise SystemExit(f"Could not open webcam {args.camera}")
 
     speaker = None       # the running speech process, if any
-    last_spoken = None   # label most recently spoken
+    last_spoken = None   # set of labels most recently spoken
     last_time = 0.0      # when it was spoken
 
     prev = time.perf_counter()
@@ -70,17 +73,27 @@ def main():
         if found:
             print(", ".join(found))
 
-        # Speak the highest-confidence object, without blocking the video.
-        # Skip while still speaking, so announcements never pile up.
+        # Speak the top distinct objects by confidence, without blocking the
+        # video. Skip while still speaking, so announcements never pile up.
         if not args.mute and len(result.boxes):
-            best = int(result.boxes.conf.argmax())
-            label = result.names[int(result.boxes.cls[best])]
+            labels = []
+            for i in result.boxes.conf.argsort(descending=True).tolist():
+                name = result.names[int(result.boxes.cls[i])]
+                if name not in labels:
+                    labels.append(name)
+                if len(labels) == args.top:
+                    break
+            # Compare as a set, so a mere reordering is not re-announced.
             now = time.perf_counter()
             idle = speaker is None or speaker.poll() is not None
-            due = label != last_spoken or now - last_time >= args.repeat
+            due = set(labels) != last_spoken or now - last_time >= args.repeat
             if idle and due:
-                speaker = subprocess.Popen(speech_command(label))
-                last_spoken, last_time = label, now
+                if len(labels) > 1:
+                    text = ", ".join(labels[:-1]) + ", and " + labels[-1]
+                else:
+                    text = labels[0]
+                speaker = subprocess.Popen(speech_command(text))
+                last_spoken, last_time = set(labels), now
 
         # Draw boxes and labels, plus the frame rate.
         annotated = result.plot()
@@ -90,7 +103,7 @@ def main():
         cv2.putText(annotated, f"{fps:.1f} FPS", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-        cv2.imshow("YOLO26 nano (q to quit)", annotated)
+        cv2.imshow("YOLO26 small (q to quit)", annotated)
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
